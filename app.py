@@ -19,9 +19,49 @@ uploaded_files = st.file_uploader("Upload developer inventory files (Excel/PDF):
 
 output_data = []
 
+def extract_from_excel(file, filename):
+    try:
+        xl = pd.ExcelFile(file)
+        all_data = []
+        for sheet in xl.sheet_names:
+            df = xl.parse(sheet)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            for _, row in df.iterrows():
+                row_data = {
+                    "Developer": sheet if "developer" in sheet.lower() else "",
+                    "Project_Name": sheet if "project" in sheet.lower() else "",
+                    "Property_Type": row.get("TypeDescriptionEN", row.get("Property Type", "")),
+                    "View": row.get("View", ""),
+                    "Unit_Number": row.get("Unit Code", row.get("Unit_Number", "")),
+                    "Floor_Number": row.get("Floor", row.get("Floor_Number", "")),
+                    "Number_Of_Bedrooms": row.get("Bedrooms", ""),
+                    "Starting_Price": row.get("20%dp", row.get("Price", "")),
+                    "Payment_Plan": "Yes" if len(set(df.columns).intersection({"20%dp", "50% now 50% later", "installment"})) > 1 else "No",
+                    "Post_handover_Payment_Plan": "Yes" if "post" in " ".join(df.columns).lower() else "",
+                    "Internal_Area_Size": row.get("Net Area", row.get("Unit Area Size", "")),
+                    "Balcony_Area_Size": row.get("Terrace Size", row.get("Balcony Size", "")),
+                    "Total_Area_Size": row.get("Total Area", ""),
+                    "Number_Of_Parkings": "2" if str(row.get("Bedrooms", "")) in ["3", "3BR"] else "1",
+                    "Location": row.get("Location", ""),
+                    "City": "Dubai",
+                    "Handover_Date": row.get("Handover", ""),
+                    "Brochure_Link": "",
+                    "Layout_Link": "",
+                    "Marketing_Material": "",
+                    "Facts_Sheet": "",
+                    "Source_File": filename
+                }
+                all_data.append(row_data)
+        return all_data
+    except Exception as e:
+        st.error(f"❌ Error reading Excel file {filename}: {e}")
+        return []
+
 if uploaded_files:
     for file in uploaded_files:
         filename = file.name
+
         if filename.endswith(".pdf"):
             reader = PdfReader(file)
             text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
@@ -61,6 +101,9 @@ if uploaded_files:
                     "Facts_Sheet": "",
                     "Source_File": filename
                 })
+
+        elif filename.endswith(".xls") or filename.endswith(".xlsx"):
+            output_data.extend(extract_from_excel(file, filename))
 
     if output_data:
         df_result = pd.DataFrame(output_data, columns=MASTER_COLUMNS)
